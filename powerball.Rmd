@@ -129,14 +129,14 @@ Side note: because we're using the Poisson distribution, we know that the expect
 number of winning tickets for a given pot is also given by
 $\lambda = \frac{NumTix(Pot)}{292201338}$.
 
-Let $P_{Pot}(i)$ denote the Poisson probability of $i$ winners when the pot is of size $Pot$.
-To calculate the expected value of the pot, then, we calculate:
+Let $P_{Pot}(i)$ denote the Poisson probability of $i$ **other** winners when the pot is of size $Pot$.
+To calculate the expected value of the pot for **you**, then, we calculate:
 
-$$E(Pot) = 0*P_{Pot}(0) + \frac{Pot}{1}*P_{Pot}(0) + \frac{Pot}{2}*P_{Pot}(0) + ...$$
+$$E(Pot) = \frac{Pot}{1}*P_{Pot}(0) + \frac{Pot}{2}*P_{Pot}(1) + \frac{Pot}{3}*P_{Pot}(2) + ...$$
 
 or
 
-$$E(Pot) = Pot*\sum_{i=1}^{\infty} \frac{P_{Pot}(i)}{i}$$
+$$E(Pot) = Pot*\sum_{i=0}^{\infty} \frac{P_{Pot}(i)}{i+1}$$
 
 Instead of going to infinity, we'll stop at $i=6$. Note that this is
 the expected value of the pot, not the pot's contribution to your expected
@@ -146,9 +146,9 @@ $$E_{Pot}(Ticket) = `r e` + \frac{E(Pot)}{292201338}$$.
 
 ```{r, eval = FALSE}
 pot.df$Expected.Jackpot <- pot.df %>% 
-  select(Pot, One, Two, Three, Four, Five, Six, At_Least_One) %>% 
+  select(Pot, Zero, One, Two, Three, Four, Five, Six) %>% 
   as.matrix() %>% 
-  apply(1, function(x) x[1]*1000000/292201338*sum(x[2:7]/(1:6))/x[8])
+  apply(1, function(x) x[1]*1000000/292201338*sum(x[2:8]/(1:7)))
 pot.df$Expected <- pot.df$Expected.Jackpot + e
 
 
