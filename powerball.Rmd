@@ -61,7 +61,7 @@ numbers %>%
 We'll try to fit a quadratic model on the log-log scale. We subset to pots sold with $2 tickets.
 
 ```{r}
-tix.lm <- lm(log(Num_Tix) ~ log(Pot) + I(log(Pot)^2), data = numbers, subset = Price_Per_Tix == 2 & Pot > 40)
+tix.lm <- lm(log(Num_Tix) ~ log(Pot) + I(log(Pot)^2), data = numbers, subset = Price_Per_Tix == 2)
 ```
 
 ```{r, eval = FALSE}
