@@ -31,18 +31,25 @@ The expected value of non-jackpot prizes is `r round(e, 4)` dollars.
 To calculate the **overall** expected value, 
 we'll need to take into account multiple jackpot winners.
 
+We'll want to only consider recent years, as ticket sales appear to be associated with the
+price of the ticket:
+
 ```{r plotly = TRUE}
-ggplot(numbers, aes(x = Pot, y = Num_Tix)) +
+numbers %>% 
+  mutate(Price_Per_Tix = paste0("$", Price_Per_Tix)) %>% 
+  ggplot(aes(x = Pot, y = Num_Tix, color = Price_Per_Tix)) +
   geom_point(shape = 1) +
   ggtitle("Number of Tickets Sold by Jackpot Size") +
   xlab("Jackpot Size") +
   ylab("Number of Tickets Sold")
 ```
 
-We take the log-log transform.
+If we take the log-log transform, it becomes more obvious.
 
 ```{r}
-ggplot(numbers, aes(x = Pot, y = Num_Tix)) +
+numbers %>% 
+  mutate(Price_Per_Tix = paste0("$", Price_Per_Tix)) %>% 
+  ggplot(aes(x = Pot, y = Num_Tix, color = Price_Per_Tix)) +
   scale_y_log10() +
   scale_x_log10(breaks = c(100, 200, 300, 400, 500, 750, 1000, 1500), minor_breaks = NULL) +
   geom_point(shape = 1) +
@@ -51,10 +58,10 @@ ggplot(numbers, aes(x = Pot, y = Num_Tix)) +
   ylab("Number of Tickets Sold")
 ```
 
-We'll try to fit a quadratic model on the log-log scale. We subset to pots at least $40 million.
+We'll try to fit a quadratic model on the log-log scale. We subset to pots sold with $2 tickets.
 
 ```{r}
-tix.lm <- lm(log(Num_Tix) ~ log(Pot) + I(log(Pot)^2), data = numbers, subset = Pot >= 40)
+tix.lm <- lm(log(Num_Tix) ~ log(Pot) + I(log(Pot)^2), data = numbers, subset = Price_Per_Tix == 2 & Pot > 40)
 ```
 
 ```{r, eval = FALSE}
@@ -66,24 +73,24 @@ shapiro.test(residuals(tix.lm))
 
 ```
 
-This isn't a particularly great model, especially for the outliers, but we'll go with it.
+This isn't a particularly great model, especially for the outliers and low pots, but we'll go with it.
 Our best-fit equation is then:
 
 $ln{(\widehat{NumTix})} = `r coef(tix.lm)[1]` + `r coef(tix.lm)[2]`*ln{(Pot)} + `r coef(tix.lm)[3]`*(ln{(Pot)})^{2}$.
 
 ```{r}
-pot.df <- data.frame(Pot = seq(40, 1200))
+pot.df <- data.frame(Pot = seq(from = 40, to = 1500, by = 1))
 pot.df$Num_Tix <- exp(predict(tix.lm, newdata = pot.df))
-ggplot(numbers, aes(x = Pot, y = Num_Tix)) +
+ggplot(filter(numbers, Price_Per_Tix == 2), aes(x = Pot, y = Num_Tix)) +
   scale_y_log10() +
   scale_x_log10(breaks = c(100, 200, 300, 400, 500, 750, 1000)) +
   geom_point(shape = 1) +
-  ggtitle("log(Number of Tickets Sold) by Jackpot Size") +
+  ggtitle("Number of Tickets Sold by Jackpot Size") +
   xlab("Jackpot Size") +
-  ylab("log(Number of Tickets Sold)") +
+  ylab("Number of Tickets Sold") +
   geom_line(aes(x = Pot, y = Num_Tix), data = pot.df, color = "red")
 
-ggplot(numbers, aes(x = Pot, y = Num_Tix)) +
+ggplot(filter(numbers, Price_Per_Tix == 2), aes(x = Pot, y = Num_Tix)) +
   geom_point(shape = 1) +
   ggtitle("Number of Tickets Sold by Jackpot Size") +
   xlab("Jackpot Size") +
@@ -118,7 +125,7 @@ ggplot(pot.df.long) +
 
 
 ggplot(pot.df.long) +
-  scale_x_continuous(breaks = seq(0, 1300, by = 100)) +
+  scale_x_continuous(breaks = seq(0, 1500, by = 100)) +
   geom_line(aes(x = Pot, y = value, color = variable)) +
   ggtitle("Probability of Number of Winners at a Given Pot") +
   ylim(0,1) +
@@ -150,27 +157,35 @@ or
 
 $$E(Pot) = \frac{Pot}{\lambda_{Pot}}(1-P_{Pot}(0))$$
 
+or
+
+$$E(Pot) = \frac{Pot*292201338}{NumTix(Pot)}(1 - e^{-NumTix(Pot)/292201338})$$
+
 Note that this is
 the expected value of the pot, not the pot's contribution to your expected
 value from buying a ticket. Thus, we get something like this:
 
-$$E_{Pot}(Ticket) = `r e` + \frac{E(Pot)}{292201338}$$.
+$$E_{Pot}(Ticket) = `r e` + \frac{E(Pot)}{292201338}$$
+
+or
+
+$$E_{Pot}(Ticket) = `r e` + \frac{Pot}{NumTix(Pot)}(1 - e^{-NumTix(Pot)/292201338})$$
 
 ```{r}
-pot.df$Expected.Jackpot <- pot.df %>% 
-  select(Pot, Num_Tix, Zero) %>% 
-  as.matrix() %>% 
-  apply(1, function(x) x[1]*1000000*(1 - x[3])/x[2])
-pot.df$Expected <- pot.df$Expected.Jackpot + e
-
-
+pot.df <- pot.df %>%
+  mutate(
+    Expected.Jackpot = map2_dbl(Pot, Num_Tix, ~ .x*1000000*(1 - exp(-.y/odds$one_over_p[1]))/.y),
+    Expected = Expected.Jackpot + e,
+    Naive.Expectation = e + Pot*1000000/odds$one_over_p[1]
+  )
 
 pot.df %>% 
-  select(Pot, Expected.Jackpot, Expected) %>% 
+  select(Pot, Expected.Jackpot, Expected, Naive.Expectation) %>% 
   reshape2::melt(id.vars = "Pot") %>% 
   ggplot() +
-    scale_x_continuous(breaks = seq(0, 1300, by = 100)) +
-    scale_y_continuous(breaks = 0.5*(0:8), minor_breaks = seq(0, 4, by = 0.1)) +
+    scale_x_continuous(breaks = seq(0, 1500, by = 100)) +
+    scale_y_continuous(breaks = 0.5*(0:10), minor_breaks = seq(0, 5, by = 0.1)) +
+    geom_hline(yintercept = 2, linetype = "dashed", color = "black") +
     geom_line(aes(x = Pot, y = value, color = variable)) +
     ggtitle("Expectation at a Given Pot") +
     xlab("Pot") +
