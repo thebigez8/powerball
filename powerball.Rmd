@@ -61,7 +61,22 @@ numbers %>%
 We'll try to fit a quadratic model on the log-log scale. We subset to pots sold with $2 tickets.
 
 ```{r}
-tix.lm <- lm(log(Num_Tix) ~ log(Pot) + I(log(Pot)^2), data = numbers, subset = Price_Per_Tix == 2)
+numbers <- numbers %>% 
+  mutate(
+    last_log_Pot = lag(log(Pot))
+  ) %>% 
+  filter(Price_Per_Tix == 2) %>% 
+  mutate(
+    new_Pot = Pot == 40,
+    jackpot_run = 1 + cumsum(new_Pot),
+    last_log_Pot = if_else(new_Pot, 0, last_log_Pot)
+  )
+# tix.lm <- lm(log(Num_Tix) ~ log(Pot) + I(log(Pot)^2), data = numbers)
+
+
+quants <- log(c(60, 100, 180, 280, 400))
+tix.lm <- lm(log(Num_Tix) ~ splines::bs(log(Pot), knots = quants, degree = 1), data = numbers)
+
 ```
 
 ```{r, eval = FALSE}
@@ -81,21 +96,21 @@ $ln{(\widehat{NumTix})} = `r coef(tix.lm)[1]` + `r coef(tix.lm)[2]`*ln{(Pot)} + 
 ```{r}
 pot.df <- data.frame(Pot = seq(from = 40, to = 1500, by = 1))
 pot.df$Num_Tix <- exp(predict(tix.lm, newdata = pot.df))
-ggplot(filter(numbers, Price_Per_Tix == 2), aes(x = Pot, y = Num_Tix)) +
+ggplot(numbers, aes(x = Pot, y = Num_Tix)) +
   scale_y_log10() +
   scale_x_log10(breaks = c(100, 200, 300, 400, 500, 750, 1000)) +
   geom_point(shape = 1) +
   ggtitle("Number of Tickets Sold by Jackpot Size") +
   xlab("Jackpot Size") +
   ylab("Number of Tickets Sold") +
-  geom_line(aes(x = Pot, y = Num_Tix), data = pot.df, color = "red")
+  geom_line(data = pot.df, color = "red")
 
-ggplot(filter(numbers, Price_Per_Tix == 2), aes(x = Pot, y = Num_Tix)) +
+ggplot(numbers, aes(x = Pot, y = Num_Tix)) +
   geom_point(shape = 1) +
   ggtitle("Number of Tickets Sold by Jackpot Size") +
   xlab("Jackpot Size") +
   ylab("Number of Tickets Sold") +
-  geom_line(aes(x = Pot, y = Num_Tix), data = pot.df, color = "red")
+  geom_line(data = pot.df, color = "red")
 ```
 
 We will use the Poisson approximation to the binomial distribution to find the probability
@@ -191,4 +206,29 @@ pot.df %>%
     xlab("Pot") +
     ylab("Expectation") +
     theme(legend.position = 'top')
+```
+
+
+
+```{r eval=FALSE}
+tix.lm <- lm(log(Num_Tix) ~ log(Pot) + I(log(Pot)^2) + jackpot_run + last_log_Pot + new_Pot,
+             data = numbers)
+
+par(mfrow = c(2,2))
+plot(tix.lm)
+summary(tix.lm)
+par(mfrow = c(1,1))
+shapiro.test(residuals(tix.lm))
+
+numbers %>% 
+  mutate(pred = exp(fitted(tix.lm))) %>% 
+  ggplot(aes(x = Pot, y = Num_Tix, color = jackpot_run, group = jackpot_run)) +
+  scale_y_log10() +
+  scale_x_log10(breaks = c(100, 200, 300, 400, 500, 750, 1000, 1500), minor_breaks = NULL) +
+  geom_point(shape = 1) +
+  geom_line() +
+  geom_line(aes(y = pred), linetype = "dotted") +
+  ggtitle("Number of Tickets Sold by Jackpot Size") +
+  xlab("Jackpot Size") +
+  ylab("Number of Tickets Sold")
 ```
