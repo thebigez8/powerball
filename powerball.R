@@ -20,7 +20,7 @@ get_data <- function()
       Date = replace(Date, Date == "7/29/2016", "7/30/2016"),
       Date = as.Date(Date, format = "%m/%d/%Y")
     )
-
+  stopifnot(sales$PB_sales / sales$Price_Per_Tix == sales$Num_Tix)
   numbers <- "winnums.csv" %>%
     read_csv(col_names = TRUE, col_types = cols()) %>%
     mutate(
